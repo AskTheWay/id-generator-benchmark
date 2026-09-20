@@ -1,0 +1,17 @@
+# Python 运行时产物
+__pycache__/
+*.pyc
+
+# 虚拟环境
+.venv/
+venv/
+
+# 环境变量(含连接密码, 不入库)
+.env
+
+# 日志
+*.log
+
+# IDE / 编辑器
+.idea/
+.vscode/

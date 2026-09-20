@@ -1,0 +1,49 @@
+# 一键拉起压测所需的依赖服务: PostgreSQL + Redis
+# 启动:  docker compose up -d
+# 停止并删除数据卷:  docker compose down -v
+
+services:
+  # PostgreSQL 16 —— 用于 DB 序列号生成方案 (db_sequence)
+  # 宿主机端口映射为 15432, 避免与本机已安装的 5432 PostgreSQL 冲突
+  postgres:
+    image: postgres:16-alpine
+    container_name: idbench-postgres
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: idbench
+    volumes:
+      # 数据卷持久化, 重启容器后序列号进度不丢失
+      - idbench_pgdata:/var/lib/postgresql/data
+    # 服务端连接上限调到 600: 应用侧连接池(db_sequence)为支持 concurrency=512
+    # 的压测上限开到 600, 若保留 PG 默认 max_connections=100 会撞上
+    # "FATAL: too many connections" 报错
+    command: postgres -c max_connections=600
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d idbench"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Redis 7 —— 用于 Redis INCR 与号段模式生成方案 (redis_incr / redis_segment)
+  # 宿主机端口映射 6380, 避免与本机已有 6379 Redis 冲突;
+  # 本机已有 Redis 可直接用, 设 REDIS_PORT=6379
+  # (使用本容器的 Redis 时, 需给应用设 REDIS_PORT=6380)
+  redis:
+    image: redis:7-alpine
+    container_name: idbench-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - idbench_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  idbench_pgdata:
+  idbench_redisdata:

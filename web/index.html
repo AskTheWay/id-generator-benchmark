@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ID Generator Benchmark</title>
+<meta name="description" content="交互式对比 8 种主流唯一 ID 生成方案的性能:延迟分位数 / 吞吐 / 重复率">
+<!-- 内联 SVG 图标(条形码意象), 避免额外请求 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23161b22'/%3E%3Cpath d='M4 3v10M7 3v10M10 3v10M12 3v10' stroke='%2358a6ff' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+/* ============================================================
+   全局主题: GitHub Dark 风格
+   背景板 #0d1117 / 卡片 #161b22 / 主色 #58a6ff
+   ============================================================ */
+:root {
+  --bg: #0d1117;            /* 页面背景 */
+  --card: #161b22;          /* 卡片表面 */
+  --border: #30363d;        /* 常规描边 */
+  --grid: #21262d;          /* 表格行线 / 图表网格线(比表面浅一档的极细线) */
+  --text: #e6edf3;          /* 主文字 */
+  --text-2: #c9d1d9;        /* 次级文字 */
+  --muted: #8b949e;         /* 弱化文字 / 坐标轴刻度 */
+  --accent: #58a6ff;        /* 主色(链接 / 焦点 / 点缀) */
+  --accent-btn: #1f6feb;    /* 主按钮 */
+  --accent-btn-hover: #388bfd;
+  --ok: #3fb950;            /* 状态-可用(仅用于状态点 / 状态文字, 不用于数据系列) */
+  --danger: #f85149;        /* 错误横幅边框 */
+  --danger-text: #ff7b72;   /* 错误文字 */
+  --warn: #e3b341;          /* 跳过提示 */
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; }
+/* hidden 属性在任何 display 规则下都生效 */
+[hidden] { display: none !important; }
+html { color-scheme: dark; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-2);
+  /* 顶部一点极淡的主色辉光, 增加"科技感"但不喧宾夺主 */
+  background: radial-gradient(1100px 380px at 50% -120px, rgba(88, 166, 255, 0.08), transparent 60%), var(--bg);
+}
+.mono { font-family: var(--mono); }
+.container { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------- Chart.js 加载失败提示条(页面顶部) ---------- */
+.chart-fallback {
+  background: rgba(210, 153, 34, 0.12);
+  border-bottom: 1px solid rgba(210, 153, 34, 0.35);
+  color: var(--warn);
+  text-align: center;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+/* 未启用 JS 时的兜底提示 */
+.noscript-bar { background: rgba(248, 81, 73, 0.12); color: var(--danger-text); text-align: center; padding: 10px 16px; }
+
+/* ---------- 头部 ---------- */
+.site-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px;
+  padding: 30px 0 22px;
+}
+.site-header h1 { margin: 0; font-size: 23px; letter-spacing: 0.3px; color: var(--text); }
+.site-header h1 .accent { color: var(--accent); }
+.subtitle { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
+.health-badges { display: flex; gap: 10px; flex-wrap: wrap; }
+.health-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px;
+  background: rgba(22, 27, 34, 0.65); font-size: 13px; color: var(--text-2);
+}
+.health-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #484f58; flex: none; }
+.health-badge.up .dot { background: var(--ok); box-shadow: 0 0 6px rgba(63, 185, 80, 0.55); }
+.health-badge .st { color: var(--muted); }
+.health-badge.up .st { color: var(--ok); }
+
+/* ---------- 区块标题 ---------- */
+.section-title {
+  font-size: 16px; font-weight: 600; color: var(--text);
+  border-left: 3px solid var(--accent); padding-left: 10px; margin: 0 0 14px;
+}
+
+/* ---------- 方案卡片网格: 4 / 2 / 1 列响应式 ---------- */
+.cards-section { margin-bottom: 28px; }
+.cards-hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+.cards-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 1080px) { .cards-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .cards-grid { grid-template-columns: 1fr; } }
+
+.gen-card {
+  position: relative;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px; display: flex; flex-direction: column;
+}
+/* 不可用方案: 内容半透明置灰, 角标本身保持清晰(所以角标放在置灰层之外) */
+.gen-card.unavailable .card-body { opacity: 0.45; filter: grayscale(0.55); }
+.corner-badge {
+  position: absolute; top: -1px; right: -1px; z-index: 2;
+  padding: 2px 9px; font-size: 12px; color: var(--danger-text);
+  background: rgba(248, 81, 73, 0.16); border: 1px solid rgba(248, 81, 73, 0.45);
+  border-radius: 0 8px 0 8px; pointer-events: none;
+}
+.card-body { display: flex; flex-direction: column; gap: 9px; flex: 1; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gen-name { font-size: 15px; font-weight: 600; color: var(--text); }
+/* 类别徽章: 颜色仅作辅助, 文字本身携带含义 */
+.cat-badge { flex: none; font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid; }
+.gen-desc { margin: 0; font-size: 13px; color: var(--muted); }
+.bit-layout {
+  font-family: var(--mono); font-size: 12px; color: #79c0ff;
+  background: var(--bg); border: 1px solid var(--grid); border-radius: 6px;
+  padding: 7px 10px; overflow-wrap: anywhere;
+}
+.card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tag { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid; }
+.tag-inc  { color: var(--ok); border-color: rgba(63, 185, 80, 0.4); background: rgba(63, 185, 80, 0.1); }
+.tag-rand { color: var(--muted); border-color: var(--border); background: rgba(139, 148, 158, 0.08); }
+.dep, .gen-limit { font-size: 12px; color: var(--muted); }
+.sample-btn {
+  margin-top: auto; padding: 7px 10px; font-size: 13px;
+  color: var(--text-2); background: #21262d; border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.sample-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.sample-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* "生成示例"结果槽位: 内联显示在按钮正下方, 不覆盖卡片、无需关闭, 重复点击原地刷新 */
+.sample-slot {
+  padding: 7px 10px; font-size: 12px;
+  background: var(--bg); border: 1px solid var(--grid); border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.sample-slot.loading { color: var(--muted); border-style: dashed; }
+.sample-slot.err { color: var(--danger-text); border-color: rgba(248, 81, 73, 0.45); }
+.sample-slot-id { font-family: var(--mono); font-size: 12px; color: #79c0ff; word-break: break-all; }
+.sample-slot.err .sample-slot-id { color: var(--danger-text); }
+
+/* ---------- 压测控制条 ---------- */
+.controls-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 20px; margin-bottom: 28px;
+}
+.controls-row { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 13px; color: var(--muted); }
+.field input {
+  width: 160px; padding: 8px 10px; font-size: 14px; font-family: inherit;
+  color: var(--text-2); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.22); }
+.field input:disabled { opacity: 0.55; }
+.primary-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 11px 28px; font-size: 15px; font-weight: 600; font-family: inherit;
+  color: #fff; background: var(--accent-btn);
+  border: 1px solid rgba(240, 246, 252, 0.12); border-radius: 6px;
+  cursor: pointer; transition: background 0.15s;
+}
+.primary-btn:hover:not(:disabled) { background: var(--accent-btn-hover); }
+.primary-btn:disabled { opacity: 0.75; cursor: progress; }
+.spinner {
+  width: 14px; height: 14px; flex: none; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35); border-top-color: #fff;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+.controls-note { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+
+/* ---------- 结果区 ---------- */
+.results-section { margin-bottom: 8px; }
+.results-meta { margin: 0 0 16px; font-size: 13px; color: var(--muted); }
+.error-banner {
+  background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.45);
+  color: var(--danger-text); padding: 12px 16px; border-radius: 8px;
+  margin-bottom: 16px; word-break: break-all;
+}
+.skipped-row {
+  background: rgba(210, 153, 34, 0.1); border: 1px solid rgba(210, 153, 34, 0.4);
+  color: var(--warn); padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 13px;
+}
+.charts-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 940px) { .charts-wrap { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px;
+}
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.panel-head h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--text); }
+/* 自定义类别图例(QPS 图, 按类别着色时替代 Chart.js 内置图例) */
+.legend-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+/* 图表容器: 高度含坐标轴区, 防止轴标签被裁切 */
+.chart-box { position: relative; height: 340px; }
+
+/* ---------- 明细表格 ---------- */
+.table-panel { overflow: hidden; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 12px; border-bottom: 1px solid var(--grid); text-align: left; white-space: nowrap; }
+thead th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(177, 186, 197, 0.05); }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; } /* 数字列右对齐 + 等宽数字 */
+td.strong { color: var(--text); font-weight: 600; }
+td.warn-text { color: var(--warn); }
+td.danger-text { color: var(--danger-text); }
+.cell-sample {
+  font-family: var(--mono); font-size: 12px; color: #79c0ff;
+  max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---------- 页脚 ---------- */
+.site-footer {
+  margin-top: 44px; padding: 22px 0 34px;
+  border-top: 1px solid var(--grid);
+  color: var(--muted); font-size: 13px; line-height: 1.8;
+}
+.site-footer strong { color: var(--text-2); }
+</style>
+</head>
+<body>
+
+<!-- Chart.js CDN 加载失败时显示(onload 后检测 window.Chart) -->
+<div id="chartFallback" class="chart-fallback" hidden>图表库加载失败, 仅表格可用</div>
+<noscript><div class="noscript-bar">本页面依赖 JavaScript, 请启用后刷新。</div></noscript>
+
+<div class="container">
+
+  <!-- 1) 头部: 标题 + 服务状态徽章 -->
+  <header class="site-header">
+    <div>
+      <h1>ID Generator <span class="accent">Benchmark</span></h1>
+      <p class="subtitle">8 种主流唯一 ID 生成方案 · 交互式性能对比</p>
+    </div>
+    <div class="health-badges">
+      <span class="health-badge" id="healthRedis" title="检测中…">
+        <span class="dot"></span>Redis · <span class="st">检测中</span>
+      </span>
+      <span class="health-badge" id="healthPg" title="检测中…">
+        <span class="dot"></span>PostgreSQL · <span class="st">检测中</span>
+      </span>
+    </div>
+  </header>
+
+  <!-- 2) 方案卡片网格 -->
+  <section class="cards-section">
+    <h2 class="section-title">生成方案</h2>
+    <p id="cardsHint" class="cards-hint">正在加载方案列表…</p>
+    <div id="cardsGrid" class="cards-grid"></div>
+  </section>
+
+  <!-- 3) 压测控制条 -->
+  <section class="controls-card">
+    <h2 class="section-title">性能压测</h2>
+    <div class="controls-row">
+      <label class="field">
+        <span class="field-label">生成总数(每方案)</span>
+        <input type="number" id="totalInput" value="5000" min="100" max="200000" step="100">
+      </label>
+      <label class="field">
+        <span class="field-label">并发线程数</span>
+        <input type="number" id="concInput" value="50" min="1" max="512" step="1">
+      </label>
+      <button type="button" id="benchBtn" class="primary-btn">
+        <span class="spinner" id="btnSpinner" hidden></span>
+        <span id="btnText">开始压测(全部可用方案)</span>
+      </button>
+    </div>
+    <p class="controls-note">生成总数上限 200000, 并发上限 512, 越界自动夹紧; Redis / PostgreSQL 方案需先启动依赖服务(docker-compose)。</p>
+  </section>
+
+  <!-- 4) 结果区: 横幅 / 跳过提示 / 两张图表 / 明细表 -->
+  <section id="resultsSection" class="results-section" hidden>
+    <h2 class="section-title">压测结果</h2>
+    <p id="resultsMeta" class="results-meta"></p>
+    <div id="errorBanner" class="error-banner" hidden></div>
+    <div id="skippedRow" class="skipped-row" hidden></div>
+
+    <div id="chartsWrap" class="charts-wrap" hidden>
+      <div class="panel">
+        <div class="panel-head">
+          <h3>QPS 对比(吞吐, 降序)</h3>
+          <div id="qpsLegend" class="legend-row"></div>
+        </div>
+        <div class="chart-box"><canvas id="qpsChart" role="img" aria-label="各方案 QPS 对比横向柱状图"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h3>延迟对比 · P50 / P90 / P99(对数刻度)</h3>
+        </div>
+        <div class="chart-box"><canvas id="latencyChart" role="img" aria-label="各方案延迟分位数分组柱状图"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel table-panel" id="tablePanel" hidden>
+      <div class="panel-head"><h3>明细数据</h3></div>
+      <div class="table-scroll">
+        <table id="resultTable">
+          <thead>
+            <tr>
+              <th>方案</th>
+              <th class="num">成功</th>
+              <th class="num">重复</th>
+              <th class="num">错误</th>
+              <th class="num">QPS</th>
+              <th class="num">P50(ms)</th>
+              <th class="num">P90(ms)</th>
+              <th class="num">P99(ms)</th>
+              <th class="num">Max(ms)</th>
+              <th>ID 样例</th>
+            </tr>
+          </thead>
+          <tbody id="resultTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5) 页脚: 方法论 -->
+  <footer class="site-footer">
+    <p><strong>方法论</strong>:压测前预热连接池, 排除冷启动建连对首请求延迟的污染;压测采用线程池并发调用, 每次调用单独计时;延迟分位数(P50/P90/P99)按线性插值计算。注意:Python GIL 下压测客户端自身可能是瓶颈, 本地生成方案的数据代表下界。</p>
+  </footer>
+
+</div>
+
+<!-- Chart.js 4(延迟加载; 失败时顶部提示条兜底, 表格仍可用) -->
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+/* ============================================================
+ * ID Generator Benchmark 仪表盘逻辑(原生 JS, 无构建步骤)
+ * 所有图表代码都以 window.Chart 是否存在为前置条件(CDN 失败时降级为纯表格)。
+ * ============================================================ */
+'use strict';
+
+/* ---------- 常量与元素引用 ---------- */
+var FONT_STACK = 'system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
+
+// 类别配色(已按暗色面 #161b22 做过 CVD/对比度验证):
+// 本地=绿 / 数据库=紫 / Redis=红; 颜色只作辅助, 徽章/图例文字始终携带含义
+var CATEGORY_INFO = {
+  local:    { label: '本地',   text: '#2ea043', bg: 'rgba(46, 160, 67, 0.14)',  border: 'rgba(46, 160, 67, 0.45)' },
+  database: { label: '数据库', text: '#a371f7', bg: 'rgba(163, 113, 247, 0.14)', border: 'rgba(163, 113, 247, 0.45)' },
+  redis:    { label: 'Redis',  text: '#f85149', bg: 'rgba(248, 81, 73, 0.14)',  border: 'rgba(248, 81, 73, 0.45)' }
+};
+
+// 延迟分位数系列: P50→P99 用同一色相(蓝)的浅→深序数梯度, 让"严重程度"随颜色加深
+var LATENCY_SERIES = [
+  { key: 'p50_ms', label: 'P50', color: '#79c0ff' },
+  { key: 'p90_ms', label: 'P90', color: '#388bfd' },
+  { key: 'p99_ms', label: 'P99', color: '#1f6feb' }
+];
+
+var $ = function (id) { return document.getElementById(id); };
+var elCardsGrid = $('cardsGrid'), elCardsHint = $('cardsHint');
+var elHealthRedis = $('healthRedis'), elHealthPg = $('healthPg');
+var elTotal = $('totalInput'), elConc = $('concInput');
+var elBenchBtn = $('benchBtn'), elBtnSpinner = $('btnSpinner'), elBtnText = $('btnText');
+var elResultsSection = $('resultsSection'), elResultsMeta = $('resultsMeta');
+var elErrorBanner = $('errorBanner'), elSkippedRow = $('skippedRow');
+var elChartsWrap = $('chartsWrap'), elQpsLegend = $('qpsLegend');
+var elTablePanel = $('tablePanel'), elResultTbody = $('resultTbody');
+
+var generatorsData = [];      // GET /api/generators 的原始列表
+var benchRunning = false;     // 压测进行中标志(防重入)
+var charts = { qps: null, latency: null };  // Chart 实例(重画前需销毁)
+var chartDefaultsApplied = false;
+
+/* ---------- 工具函数 ---------- */
+
+// HTML 转义, 防止后端返回的字符串破坏页面结构
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+// 数字格式化: 大数带千分位, 小数按量级保留有效位
+function fmtNum(v) {
+  if (v == null || !isFinite(v)) return '—';
+  if (v === 0) return '0';
+  if (v >= 1000) return Math.round(v).toLocaleString('en-US');
+  if (v >= 100) return String(parseFloat(v.toFixed(0)));
+  if (v >= 1) return String(parseFloat(v.toFixed(2)));
+  if (v >= 0.001) return String(parseFloat(v.toPrecision(3)));
+  return v.toExponential(2); // 极小值用科学计数法, 避免一长串零
+}
+
+// 输入框取值并夹紧到 [min, max](非法输入回落到默认值)
+function clampInt(raw, min, max, fallback) {
+  var v = Math.floor(Number(raw));
+  if (!isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
+
+// 按方案 name 查类别(压测结果里没有 category, 需回卡片数据里找)
+function catOf(name) {
+  for (var i = 0; i < generatorsData.length; i++) {
+    if (generatorsData[i].name === name) return generatorsData[i].category;
+  }
+  return null;
+}
+function catInfo(name) {
+  return CATEGORY_INFO[catOf(name)] ||
+    { label: '其他', text: '#8b949e', bg: 'rgba(139,148,158,0.14)', border: 'rgba(139,148,158,0.45)' };
+}
+function displayName(name) {
+  for (var i = 0; i < generatorsData.length; i++) {
+    if (generatorsData[i].name === name) return generatorsData[i].display_name;
+  }
+  return name;
+}
+
+/* ---------- fetch 封装: JSON 请求 + 统一错误抛出 ---------- */
+async function apiFetch(url, opts) {
+  opts = opts || {};
+  var init = { method: opts.method || 'GET', headers: { 'Content-Type': 'application/json' } };
+  if (opts.body != null) init.body = JSON.stringify(opts.body);
+  var resp;
+  try {
+    resp = await fetch(url, init);
+  } catch (err) {
+    // 网络层失败(服务未启动 / 断网等)
+    throw new Error('网络请求失败(' + (err && err.message ? err.message : '未知错误') + ')');
+  }
+  var data = null;
+  try { data = await resp.json(); } catch (e) { /* 响应体不是 JSON 时忽略, 走状态码分支 */ }
+  if (!resp.ok) {
+    var detail = data && data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : '';
+    throw new Error('HTTP ' + resp.status + (detail ? ': ' + detail : ''));
+  }
+  return data;
+}
+
+/* ---------- 错误横幅(结果区顶部) ---------- */
+function showError(msg) {
+  elResultsSection.hidden = false;      // 确保横幅可见(即使压测尚未产生数据)
+  elErrorBanner.textContent = msg;
+  elErrorBanner.hidden = false;
+}
+function hideError() { elErrorBanner.hidden = true; }
+
+/* ---------- 服务健康状态 ---------- */
+function setHealth(el, ok) {
+  el.classList.toggle('up', ok);
+  el.classList.toggle('down', !ok);
+  el.querySelector('.st').textContent = ok ? '可用' : '不可用';
+  el.title = ok ? '服务可用' : '服务不可用';
+}
+async function loadHealth() {
+  try {
+    var h = await apiFetch('/api/health');
+    setHealth(elHealthRedis, !!h.redis);
+    setHealth(elHealthPg, !!h.postgres);
+  } catch (err) {
+    // 健康检测本身失败: 一律显示灰色不可用
+    setHealth(elHealthRedis, false); setHealth(elHealthPg, false);
+    elHealthRedis.title = elHealthPg.title = '健康检测失败: ' + err.message;
+  }
+}
+
+/* ---------- 方案卡片渲染 ---------- */
+function renderCards(gens) {
+  elCardsGrid.innerHTML = '';
+  gens.forEach(function (g) {
+    var info = CATEGORY_INFO[g.category] ||
+      { label: g.category || '其他', text: '#8b949e', bg: 'rgba(139,148,158,0.14)', border: 'rgba(139,148,158,0.45)' };
+    var card = document.createElement('article');
+    card.className = 'gen-card' + (g.available ? '' : ' unavailable');
+    card.dataset.name = g.name;
+    card.innerHTML =
+      (g.available ? '' : '<span class="corner-badge">依赖不可用</span>') +
+      '<div class="card-body">' +
+        '<div class="card-head">' +
+          '<span class="gen-name">' + esc(g.display_name) + '</span>' +
+          '<span class="cat-badge" style="color:' + info.text + ';background:' + info.bg + ';border-color:' + info.border + '">' + esc(info.label) + '</span>' +
+        '</div>' +
+        '<p class="gen-desc">' + esc(g.description) + '</p>' +
+        (g.bit_layout ? '<div class="bit-layout">' + esc(g.bit_layout) + '</div>' : '') +
+        '<div class="card-meta">' +
+          '<span class="tag ' + (g.monotonic ? 'tag-inc' : 'tag-rand') + '">' + (g.monotonic ? '趋势递增' : '无序') + '</span>' +
+          '<span class="dep">依赖: ' + esc(g.dependency) + '</span>' +
+        '</div>' +
+        '<div class="gen-limit">理论容量: ' + esc(g.theoretical_limit) + '</div>' +
+        '<button type="button" class="sample-btn"' + (g.available ? '' : ' disabled') + '>生成示例</button>' +
+        '<div class="sample-slot" hidden><code class="sample-slot-id"></code></div>' +
+      '</div>';
+    elCardsGrid.appendChild(card);
+  });
+}
+
+async function loadGenerators() {
+  try {
+    var data = await apiFetch('/api/generators');
+    generatorsData = (data && data.generators) || [];
+    elCardsHint.hidden = true;
+    renderCards(generatorsData);
+  } catch (err) {
+    elCardsHint.hidden = false;
+    elCardsHint.textContent = '方案列表加载失败: ' + err.message;
+    showError('方案列表加载失败: ' + err.message); // 同时在结果区显示红色横幅
+  }
+}
+
+/* ---------- "生成示例"按钮(事件委托, 结果内联显示在本卡片按钮下方) ---------- */
+elCardsGrid.addEventListener('click', async function (e) {
+  var btn = e.target.closest('.sample-btn');
+  if (!btn || btn.disabled) return;
+  var card = btn.closest('.gen-card');
+  var slot = card.querySelector('.sample-slot');
+  var idEl = slot.querySelector('.sample-slot-id');
+
+  // 槽位置为加载态(虚线边框提示"生成中"), 结果回来后原地更新
+  slot.hidden = false;
+  slot.className = 'sample-slot loading';
+  idEl.textContent = '生成中…';
+
+  btn.disabled = true;
+  try {
+    var data = await apiFetch('/api/sample/' + encodeURIComponent(card.dataset.name), { method: 'POST' });
+    slot.className = 'sample-slot';
+    idEl.textContent = data && data.id != null ? data.id : '(空)';
+  } catch (err) {
+    slot.className = 'sample-slot err';
+    idEl.textContent = '失败: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---------- 压测流程 ---------- */
+
+function setProgress(running, i, n) {
+  elBenchBtn.disabled = running;
+  elBtnSpinner.hidden = !running;
+  elBtnText.textContent = running
+    ? '压测中… 第 ' + i + '/' + n + ' 个'
+    : '开始压测(全部可用方案)';
+}
+
+async function runBenchmark() {
+  if (benchRunning) return;
+  // 读取并夹紧参数(100~200000 / 1~512), 写回输入框让用户看到生效值
+  var total = clampInt(elTotal.value, 100, 200000, 5000);
+  var concurrency = clampInt(elConc.value, 1, 512, 50);
+  elTotal.value = total;
+  elConc.value = concurrency;
+
+  // 逐个压测"当前可用"的方案: 每个方案单独发一次请求,
+  // 既能拿到真实的第 i/N 进度, 也让单个方案的失败不拖垮整轮结果
+  var names = generatorsData.filter(function (g) { return g.available; }).map(function (g) { return g.name; });
+  if (!names.length) {
+    showError('当前没有可用方案: 请先启动依赖服务(Redis / PostgreSQL), 刷新页面后重试。');
+    return;
+  }
+
+  benchRunning = true;
+  elTotal.disabled = elConc.disabled = true;
+  setProgress(true, 1, names.length);
+  hideError();
+
+  var results = [];
+  var skipped = [];
+  try {
+    for (var i = 0; i < names.length; i++) {
+      setProgress(true, i + 1, names.length);
+      var resp = await apiFetch('/api/benchmark', {
+        method: 'POST',
+        body: { generators: [names[i]], total: total, concurrency: concurrency }
+      });
+      ((resp && resp.skipped) || []).forEach(function (s) { if (skipped.indexOf(s) < 0) skipped.push(s); });
+      ((resp && resp.results) || []).forEach(function (r) { results.push(r); });
+    }
+    hideError();
+    renderResults({ total: total, concurrency: concurrency }, results, skipped);
+  } catch (err) {
+    showError('压测失败: ' + err.message);
+    // 已完成的部分结果仍然展示, 便于排查
+    if (results.length) renderResults({ total: total, concurrency: concurrency }, results, skipped);
+  } finally {
+    benchRunning = false;
+    elTotal.disabled = elConc.disabled = false;
+    setProgress(false);
+  }
+}
+
+/* ---------- 结果渲染(总入口) ---------- */
+function renderResults(config, results, skipped) {
+  elResultsSection.hidden = false;
+  elResultsMeta.textContent = '共 ' + results.length + ' 个方案 · 每方案生成 ' +
+    config.total.toLocaleString('en-US') + ' 个 ID · 并发 ' + config.concurrency;
+
+  // 跳过的方案(依赖不可用)
+  elSkippedRow.hidden = !(skipped && skipped.length);
+  if (skipped && skipped.length) {
+    elSkippedRow.textContent = '已跳过(依赖不可用): ' + skipped.map(displayName).join('、');
+  }
+
+  // 图表库不可用时隐藏图表卡片, 仅表格可用(顶部提示条已说明原因)
+  elChartsWrap.hidden = !window.Chart;
+
+  // 统一按 QPS 降序排列, 图表与表格保持一致
+  var sorted = results.slice().sort(function (a, b) { return (b.qps || 0) - (a.qps || 0); });
+  renderQpsLegend(sorted);
+  renderQpsChart(sorted);
+  renderLatencyChart(sorted);
+  renderTable(sorted);
+  elTablePanel.hidden = false;
+}
+
+/* ---------- 图表: QPS 横向柱状图 ---------- */
+
+// 内联插件: 在柱端直接标注 QPS 数值(文本用文字色而非系列色)
+var qpsValueLabelsPlugin = {
+  id: 'qpsValueLabels',
+  afterDatasetsDraw: function (chart) {
+    var ctx = chart.ctx;
+    var meta = chart.getDatasetMeta(0);
+    var data = chart.data.datasets[0].data;
+    ctx.save();
+    ctx.font = '600 11px ' + FONT_STACK;
+    ctx.fillStyle = '#c9d1d9';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    meta.data.forEach(function (bar, i) {
+      ctx.fillText(Math.round(data[i]).toLocaleString('en-US'), bar.x + 6, bar.y);
+    });
+    ctx.restore();
+  }
+};
+
+// QPS 图自定义类别图例(单一数值维度 + 按类别着色, 故不用 Chart.js 内置图例)
+function renderQpsLegend(sorted) {
+  var seen = {};
+  var html = '';
+  sorted.forEach(function (r) {
+    var cat = catOf(r.name);
+    if (!cat || seen[cat]) return;
+    seen[cat] = true;
+    var info = CATEGORY_INFO[cat];
+    html += '<span class="legend-item"><span class="legend-dot" style="background:' + info.text + '"></span>' + esc(info.label) + '</span>';
+  });
+  elQpsLegend.innerHTML = html;
+}
+
+function renderQpsChart(sorted) {
+  if (!window.Chart) return; // 图表库未加载: 跳过, 表格兜底
+  applyChartDefaults();
+  if (charts.qps) { charts.qps.destroy(); charts.qps = null; }
+
+  var data = sorted.map(function (r) { return r.qps || 0; });
+  var maxQps = Math.max.apply(null, data.concat([1]));
+
+  charts.qps = new Chart($('qpsChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(function (r) { return r.display_name; }),
+      datasets: [{
+        label: 'QPS',
+        data: data,
+        // 柱色按方案类别着色(类别含义见卡片徽章与图例; 柱间留有空隙作次级区分)
+        backgroundColor: sorted.map(function (r) { return catInfo(r.name).text; }),
+        borderRadius: 4,          // 数据端 4px 圆角
+        borderSkipped: 'start',   // 基线端保持直角
+        maxBarThickness: 22,      // 柱厚上限, 剩余留白
+        categoryPercentage: 0.72,
+        barPercentage: 0.9
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { right: 10, top: 4 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#161b22', borderColor: '#30363d', borderWidth: 1,
+          titleColor: '#e6edf3', bodyColor: '#c9d1d9', padding: 10, displayColors: false,
+          callbacks: {
+            // 悬浮标题附带类别文字(类别不只靠颜色区分)
+            title: function (items) {
+              var r = sorted[items[0].dataIndex];
+              return r.display_name + ' · ' + catInfo(r.name).label;
+            },
+            label: function (item) {
+              return 'QPS: ' + Math.round(item.parsed.x).toLocaleString('en-US');
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          suggestedMax: maxQps * 1.15, // 为柱端数值标注留出空间
+          grid: { color: '#21262d', drawTicks: false },
+          border: { color: '#30363d' },
+          ticks: { callback: function (v) { return Number(v).toLocaleString('en-US'); } }
+        },
+        y: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: { color: '#c9d1d9' }
+        }
+      }
+    },
+    plugins: [qpsValueLabelsPlugin]
+  });
+}
+
+/* ---------- 图表: 延迟分组柱状图(P50/P90/P99, 对数刻度) ---------- */
+function renderLatencyChart(sorted) {
+  if (!window.Chart) return;
+  applyChartDefaults();
+  if (charts.latency) { charts.latency.destroy(); charts.latency = null; }
+
+  charts.latency = new Chart($('latencyChart'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(function (r) { return r.display_name; }),
+      datasets: LATENCY_SERIES.map(function (s) {
+        return {
+          label: s.label,
+          // 对数轴无法绘制 0(全部错误的方案), 映射为 null
+          data: sorted.map(function (r) { return r[s.key] > 0 ? r[s.key] : null; }),
+          backgroundColor: s.color,
+          borderRadius: 3,
+          borderSkipped: 'start',
+          maxBarThickness: 18,
+          categoryPercentage: 0.75,
+          barPercentage: 0.9,
+          pointStyle: 'rectRounded'
+        };
+      })
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top', align: 'end',
+          labels: { color: '#c9d1d9', usePointStyle: true, boxWidth: 7, boxHeight: 7, padding: 14 }
+        },
+        tooltip: {
+          backgroundColor: '#161b22', borderColor: '#30363d', borderWidth: 1,
+          titleColor: '#e6edf3', bodyColor: '#c9d1d9', padding: 10,
+          callbacks: {
+            label: function (item) {
+              var v = item.parsed.y;
+              return ' ' + item.dataset.label + ': ' + (v == null ? '—' : fmtNum(v)) + ' ms';
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          // 本地方案 P99 是 0.0x ms 而 Redis 是几 ms, 线性刻度下会全挤在底部, 必须用对数刻度
+          type: 'logarithmic',
+          title: { display: true, text: '延迟 (ms · 对数刻度)', color: '#8b949e', font: { size: 11 } },
+          grid: { color: '#21262d', drawTicks: false },
+          border: { color: '#30363d' },
+          ticks: { callback: function (v) { return fmtNum(v); }, padding: 6 }
+        },
+        x: {
+          grid: { display: false },
+          border: { color: '#30363d' },
+          ticks: { color: '#c9d1d9', autoSkip: false, maxRotation: 35, minRotation: 0 }
+        }
+      }
+    }
+  });
+}
+
+// Chart.js 全局默认样式(只应用一次)
+function applyChartDefaults() {
+  if (chartDefaultsApplied || !window.Chart) return;
+  Chart.defaults.font.family = FONT_STACK;
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = '#8b949e';
+  Chart.defaults.borderColor = '#21262d';
+  chartDefaultsApplied = true;
+}
+
+/* ---------- 明细表格 ---------- */
+function renderTable(sorted) {
+  elResultTbody.innerHTML = sorted.map(function (r) {
+    var samples = Array.isArray(r.samples) ? r.samples : [];
+    var first = samples.length ? samples[0] : '—';
+    // title 悬浮显示全部样例(换行分隔)
+    var titleAll = samples.length ? samples.join('\n') : '';
+    return '<tr>' +
+      '<td>' + esc(r.display_name) + '</td>' +
+      '<td class="num">' + (r.success || 0).toLocaleString('en-US') + '</td>' +
+      '<td class="num' + (r.duplicates > 0 ? ' warn-text' : '') + '">' + (r.duplicates || 0) + '</td>' +
+      '<td class="num' + (r.errors > 0 ? ' danger-text' : '') + '"' +
+        (r.errors > 0 && r.error_detail ? ' title="' + esc(r.error_detail) + '"' : '') + '>' + (r.errors || 0) + '</td>' +
+      '<td class="num strong">' + Math.round(r.qps || 0).toLocaleString('en-US') + '</td>' +
+      '<td class="num">' + fmtNum(r.p50_ms) + '</td>' +
+      '<td class="num">' + fmtNum(r.p90_ms) + '</td>' +
+      '<td class="num">' + fmtNum(r.p99_ms) + '</td>' +
+      '<td class="num">' + fmtNum(r.max_ms) + '</td>' +
+      '<td class="cell-sample" title="' + esc(titleAll) + '">' + esc(first) + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+/* ---------- 初始化 ---------- */
+(function init() {
+  // 压测按钮与回车触发
+  elBenchBtn.addEventListener('click', runBenchmark);
+  [elTotal, elConc].forEach(function (el) {
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') runBenchmark();
+    });
+  });
+
+  // 页面加载完成后检测 Chart.js 是否就绪(defer 脚本此时必然已执行或已失败)
+  window.addEventListener('load', function () {
+    if (!window.Chart) $('chartFallback').hidden = false;
+  });
+
+  loadHealth();
+  loadGenerators();
+})();
+</script>
+</body>
+</html>

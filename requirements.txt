@@ -1,0 +1,11 @@
+# Web 框架: 提供 REST API 与静态仪表盘托管
+fastapi>=0.115
+
+# ASGI 服务器: 托管 FastAPI 应用(python -m uvicorn app.main:app)
+uvicorn[standard]>=0.30
+
+# Redis 客户端: 用于 Redis INCR 与号段模式(Leaf segment)两种生成器
+redis>=5.0
+
+# PostgreSQL 驱动: 用于数据库序列(DB sequence)生成器
+psycopg2-binary>=2.9
