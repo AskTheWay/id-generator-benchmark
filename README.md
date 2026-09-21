@@ -70,8 +70,8 @@ python -m uvicorn app.main:app --reload
 | Strategy cards — live availability, batch sampling (collapsible) | Benchmark results — QPS & latency quantile charts |
 |---|---|
 | ![Strategy cards with live availability badges and collapsible batch sampling](demo_imgs/Snipaste_2026-09-22_05-16-45.png) | ![Benchmark result charts: QPS comparison and P50/P90/P99 latency](demo_imgs/Snipaste_2026-09-22_05-17-07.png) |
-| Sharding × ID — collision / step / gene / hotspot scenarios | Offline sneakernet — site quotas, watermark, ferry import |
-| ![Sharding scenarios with distribution bars](demo_imgs/Snipaste_2026-09-22_05-17-36.png) | ![Offline sneakernet simulation with site cards and ferry import](demo_imgs/Snipaste_2026-09-22_05-17-46.png) |
+| Sharding × ID — four scenario cards with tunable params | Offline sneakernet — site cards, ferry import & collision demo |
+| ![Sharding scenario cards with customizable parameters](demo_imgs/Snipaste_2026-09-22_05-17-36.png) | ![Offline sneakernet: site cards, ferry import and collision anti-pattern](demo_imgs/Snipaste_2026-09-22_05-17-46.png) |
 
 ### Configuration
 
