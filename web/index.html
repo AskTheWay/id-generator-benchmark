@@ -127,7 +127,11 @@ body {
 .sample-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .sample-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* "生成示例"结果槽位: 内联显示在按钮正下方, 不覆盖卡片、无需关闭, 重复点击原地刷新 */
+/* "生成 ID"操作行 + 结果槽位: 内联显示在按钮正下方, 不覆盖卡片、无需关闭, 重复点击原地刷新 */
+.sample-ops {
+  margin-top: auto; display: flex; gap: 8px; align-items: center;
+}
+.sample-ops .mini-input { width: 64px; }
 .sample-slot {
   padding: 7px 10px; font-size: 12px;
   background: var(--bg); border: 1px solid var(--grid); border-radius: 6px;
@@ -137,6 +141,33 @@ body {
 .sample-slot.err { color: var(--danger-text); border-color: rgba(248, 81, 73, 0.45); }
 .sample-slot-id { font-family: var(--mono); font-size: 12px; color: #79c0ff; word-break: break-all; }
 .sample-slot.err .sample-slot-id { color: var(--danger-text); }
+/* 批量生成结果: 原生 details 折叠(默认收起), 展开后列表可滚动 */
+.sample-batch summary {
+  cursor: pointer; color: var(--text-2); font-size: 12px;
+  user-select: none; list-style: none;
+}
+.sample-batch summary::-webkit-details-marker { display: none; }
+.sample-batch summary::before { content: '▸ '; color: var(--muted); }
+.sample-batch[open] summary::before { content: '▾ '; }
+.sample-batch summary:hover { color: var(--accent); }
+.batch-list {
+  margin: 8px 0 0; padding: 4px 0 0 20px;
+  font-family: var(--mono); font-size: 11.5px; color: #79c0ff;
+  max-height: 180px; overflow-y: auto; line-height: 1.9;
+  border-top: 1px dashed var(--grid);
+}
+/* 离线摆渡卡片内的折叠: 更紧凑 */
+.sample-batch.compact .batch-list { max-height: 140px; }
+/* 压测明细表格单元格内的折叠: 展开列表做成浮层, 不撑开表格行 */
+.sample-batch.inline-in-table { position: relative; display: inline-block; max-width: 240px; }
+.sample-batch.inline-in-table summary { color: #79c0ff; white-space: nowrap; }
+.sample-batch.inline-in-table .batch-list {
+  position: absolute; z-index: 5; left: 0; top: 100%;
+  background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px 6px 28px; margin: 4px 0 0;
+  min-width: 200px; max-height: 160px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
 
 /* ---------- 压测控制条 ---------- */
 .controls-card {
@@ -213,6 +244,109 @@ td.danger-text { color: var(--danger-text); }
 .cell-sample {
   font-family: var(--mono); font-size: 12px; color: #79c0ff;
   max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---------- 分库分表 / 离线摆渡演示区 ---------- */
+.demo-section { margin-bottom: 40px; }
+.demo-intro { margin: 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.8; max-width: 980px; }
+.demo-intro strong { color: var(--text-2); }
+.demo-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+}
+@media (max-width: 900px) { .demo-grid { grid-template-columns: 1fr; } }
+.demo-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 20px;
+}
+.demo-card h3 { margin: 0 0 8px; font-size: 15px; color: var(--text); }
+.demo-desc { margin: 0 0 12px; font-size: 13px; color: var(--muted); line-height: 1.7; }
+.demo-tag {
+  display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: normal; vertical-align: middle;
+  border: 1px solid rgba(248, 81, 73, 0.45); color: var(--danger-text);
+  background: rgba(248, 81, 73, 0.12);
+}
+.demo-btn {
+  padding: 7px 16px; font-size: 13px; font-family: inherit;
+  color: var(--text-2); background: #21262d; border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.demo-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.demo-btn:disabled { opacity: 0.5; cursor: progress; }
+.ghost-btn {
+  padding: 6px 14px; font-size: 12px; font-family: inherit;
+  color: var(--muted); background: none; border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer;
+}
+.ghost-btn:hover { color: var(--text); border-color: var(--muted); }
+.demo-result { margin-top: 14px; font-size: 13px; line-height: 1.7; }
+.demo-result .verdict {
+  padding: 9px 12px; border-radius: 6px; margin-bottom: 10px;
+  background: var(--bg); border: 1px solid var(--grid); color: var(--text-2);
+}
+.demo-result .verdict.bad {
+  border-color: rgba(248, 81, 73, 0.45); color: var(--danger-text);
+  background: rgba(248, 81, 73, 0.08);
+}
+.demo-result table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.demo-result th, .demo-result td {
+  padding: 5px 8px; font-size: 12px; text-align: left;
+  border-bottom: 1px solid var(--grid);
+}
+.demo-result th { color: var(--muted); font-weight: normal; }
+.demo-result td.mono { font-family: var(--mono); color: #79c0ff; font-size: 11px; }
+.demo-result td.hit { color: var(--ok); }
+/* 纯 CSS 条形图(分片分布) */
+.bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.bar-row .bar-label { flex: none; width: 64px; font-size: 12px; color: var(--muted); }
+.bar-row .bar-track { flex: 1; height: 14px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.bar-row .bar-fill { height: 100%; border-radius: 3px; background: #388bfd; }
+.bar-row .bar-fill.hot { background: #d29922; }
+.bar-row .bar-fill.bad { background: #f85149; }
+.bar-row .bar-num { flex: none; width: 52px; font-size: 12px; color: var(--text-2); text-align: right; }
+.bar-group-title { margin: 10px 0 2px; font-size: 12px; color: var(--muted); }
+/* 离线摆渡: 站点卡片 */
+.central-bar {
+  display: flex; gap: 22px; flex-wrap: wrap; align-items: center;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 20px; margin-bottom: 16px; font-size: 13px; color: var(--muted);
+}
+.central-bar strong { color: var(--text-2); }
+.offline-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) { .offline-grid { grid-template-columns: 1fr; } }
+.site-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px 18px;
+}
+.site-card .site-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.site-card .site-id { font-size: 16px; font-weight: 700; color: var(--accent); }
+.site-card .site-name { font-size: 13px; color: var(--muted); }
+.site-card .site-stats { font-size: 12px; color: var(--muted); line-height: 1.9; margin-bottom: 10px; }
+.site-card .site-stats strong { color: var(--text-2); font-weight: 600; }
+.site-card .site-ops { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.mini-input {
+  width: 72px; padding: 6px 8px; font-size: 13px; font-family: inherit;
+  color: var(--text-2); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.mini-input.wide { width: 110px; }
+.mini-input:focus { outline: none; border-color: var(--accent); }
+.op-label { font-size: 12px; color: var(--muted); }
+.site-msg { margin-top: 8px; font-size: 12px; color: var(--text-2); line-height: 1.6; }
+.site-msg.mono { font-family: var(--mono); color: #79c0ff; }
+.site-msg.err { color: var(--danger-text); }
+.bad-card { border-color: rgba(248, 81, 73, 0.35); }
+.param-row {
+  display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+  margin-bottom: 12px; font-size: 12px; color: var(--muted);
+}
+.param-row label { display: flex; align-items: center; gap: 6px; }
+.param-row .mini-input { width: 76px; }
+.demo-toolbar {
+  margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
 }
 
 /* ---------- 页脚 ---------- */
@@ -322,7 +456,93 @@ td.danger-text { color: var(--danger-text); }
     </div>
   </section>
 
-  <!-- 5) 页脚: 方法论 -->
+  <!-- 5) 分库分表 × ID 生成(演示, 需 PostgreSQL) -->
+  <section id="shardingSection" class="demo-section">
+    <h2 class="section-title">分库分表 × ID 生成</h2>
+    <p class="demo-intro">
+      分库分表是分布式 ID 的"第一推动力"—— 数据打散后, 数据库自增只在分片内成立。
+      下面用 4 个 schema 模拟 4 个分片, 四个经典场景各自独立运行、可反复重放(总量 &lt; 2 万行, 仅演示分布效果)。
+    </p>
+    <div class="demo-grid">
+      <article class="demo-card" data-scenario="independent">
+        <h3>① 独立自增 → 跨分片撞号 <span class="demo-tag bad">反面教材</span></h3>
+        <p class="demo-desc">各分片 AUTO INCREMENT 都从 1 开始: 单分片内唯一, 跨分片大面积撞号——这就是"为什么不能继续用数据库自增"的最直接证明。</p>
+        <div class="param-row">
+          <label>分片数 <input class="mini-input" data-param="shards" type="number" value="4" min="1" max="16"></label>
+          <label>每片行数 <input class="mini-input" data-param="rows" type="number" value="1000" min="10" max="20000"></label>
+        </div>
+        <button type="button" class="demo-btn">运行演示</button>
+        <div class="demo-result" hidden></div>
+      </article>
+      <article class="demo-card" data-scenario="step">
+        <h3>② 步长自增 → 零协调全局唯一</h3>
+        <p class="demo-desc">分片 i 用 START=i+1, INCREMENT=N: ID 交错而不相交。代价是扩容(如 4→8 分片)要迁移一半数据, 且跨分片无序。<strong>教学玩法: 先 4 片跑一次, 改 8 片再跑, 观察号段区间变化与扩容困境。</strong></p>
+        <div class="param-row">
+          <label>分片数 <input class="mini-input" data-param="shards" type="number" value="4" min="1" max="16"></label>
+          <label>每片行数 <input class="mini-input" data-param="rows" type="number" value="1000" min="10" max="20000"></label>
+        </div>
+        <button type="button" class="demo-btn">运行演示</button>
+        <div class="demo-result" hidden></div>
+      </article>
+      <article class="demo-card" data-scenario="gene">
+        <h3>③ 基因法 → 凭 ID 直路由</h3>
+        <p class="demo-desc">订单 ID 低位嵌入用户基因(user_id % 64), Snowflake 作基底: order_id = (snowflake &lt;&lt; 6) | gene。仅凭 ID 提取低 6 位即可定位分片, 同一用户的订单 100% 同片, 查询免广播。基因位数限制了分片数上限(6bit → 2/4/8/16/32/64)。</p>
+        <div class="param-row">
+          <label>分片数 <input class="mini-input" data-param="shards" type="number" value="4" min="1" max="16"></label>
+          <label>用户数 <input class="mini-input" data-param="users" type="number" value="200" min="4" max="2000"></label>
+          <label>每用户单数 <input class="mini-input" data-param="orders" type="number" value="10" min="1" max="50"></label>
+        </div>
+        <button type="button" class="demo-btn">运行演示</button>
+        <div class="demo-result" hidden></div>
+      </article>
+      <article class="demo-card" data-scenario="hotspot">
+        <h3>④ range 分片 + 单调 ID → 写热点</h3>
+        <p class="demo-desc">按月 range 分片, 最新分片承载绝大部分写入(热点); 对比 hash 分片的均匀——但范围查询要广播。这正是 TiDB auto_random 打散自增主键防热点的原因: "有序"在分布式存储里会从优点变成缺点。</p>
+        <div class="param-row">
+          <label>分片数 <input class="mini-input" data-param="shards" type="number" value="4" min="2" max="16"></label>
+          <label>总行数 <input class="mini-input" data-param="total" type="number" value="4000" min="160" max="100000"></label>
+          <label>最新片占比% <input class="mini-input" data-param="pct" type="number" value="80" min="50" max="99"></label>
+        </div>
+        <button type="button" class="demo-btn">运行演示</button>
+        <div class="demo-result" hidden></div>
+      </article>
+    </div>
+    <div class="demo-toolbar">
+      <button type="button" id="shardResetBtn" class="ghost-btn">重置分片数据</button>
+    </div>
+  </section>
+
+  <!-- 6) 离线摆渡(气隙网络)模拟 -->
+  <section id="offlineSection" class="demo-section">
+    <h2 class="section-title">离线摆渡(气隙网络)模拟</h2>
+    <p class="demo-intro">
+      打印设备在监狱等无法联网环境, 数据定期经光盘/U 盘"摆渡"回中心(sneakernet)。
+      三层防线: <strong>站点号入 ID</strong>(空间防撞) + <strong>本地持久水位</strong>(时间防重, 免疫时钟问题)
+      + <strong>中心预分配配额</strong>(重装防丢); 摆渡导入时唯一索引做最终兜底。
+      站点状态存本地 JSON 文件(模拟终端本地盘), 只有摆渡导入才接触数据库。
+    </p>
+    <div id="offlineCentral" class="central-bar" hidden></div>
+    <div id="offlineSites" class="offline-grid"></div>
+    <div class="demo-toolbar" style="margin-bottom: 16px;">
+      <span class="op-label">注册新站点:</span>
+      <input class="mini-input" id="newSiteId" type="text" placeholder="如 S03" maxlength="4">
+      <input class="mini-input wide" id="newSiteName" type="text" placeholder="站点名(可选)">
+      <button type="button" class="demo-btn" id="siteRegisterBtn">注册并分配首个配额</button>
+      <span class="site-msg" id="registerMsg" style="margin-top: 0;"></span>
+    </div>
+    <article class="demo-card bad-card" id="offlineBadCard">
+      <h3>反面教材: "裸奔终端"互相撞号 <span class="demo-tag bad">事后检测太晚</span></h3>
+      <p class="demo-desc">两台终端都没嵌站点号、各自从 1 发号 → 摆渡导入时被中心唯一索引拦下。
+        摆渡周期是天/周级, 发现撞号时标签早已打印流通, 只能作废重打——唯一性必须在"事前"保证。</p>
+      <button type="button" class="demo-btn" id="badDemoBtn">运行裸奔终端演示</button>
+      <div class="demo-result" hidden></div>
+    </article>
+    <div class="demo-toolbar">
+      <button type="button" id="offlineResetBtn" class="ghost-btn">重置摆渡演示</button>
+    </div>
+  </section>
+
+  <!-- 7) 页脚: 方法论 -->
   <footer class="site-footer">
     <p><strong>方法论</strong>:压测前预热连接池, 排除冷启动建连对首请求延迟的污染;压测采用线程池并发调用, 每次调用单独计时;延迟分位数(P50/P90/P99)按线性插值计算。注意:Python GIL 下压测客户端自身可能是瓶颈, 本地生成方案的数据代表下界。</p>
   </footer>
@@ -488,8 +708,11 @@ function renderCards(gens) {
           '<span class="dep">依赖: ' + esc(g.dependency) + '</span>' +
         '</div>' +
         '<div class="gen-limit">理论容量: ' + esc(g.theoretical_limit) + '</div>' +
-        '<button type="button" class="sample-btn"' + (g.available ? '' : ' disabled') + '>生成示例</button>' +
-        '<div class="sample-slot" hidden><code class="sample-slot-id"></code></div>' +
+        '<div class="sample-ops">' +
+          '<input class="mini-input" data-sample-count type="number" value="1" min="1" max="100" title="生成数量(1-100), 大于 1 时结果折叠展示">' +
+          '<button type="button" class="sample-btn"' + (g.available ? '' : ' disabled') + '>生成 ID</button>' +
+        '</div>' +
+        '<div class="sample-slot" hidden></div>' +
       '</div>';
     elCardsGrid.appendChild(card);
   });
@@ -508,27 +731,44 @@ async function loadGenerators() {
   }
 }
 
-/* ---------- "生成示例"按钮(事件委托, 结果内联显示在本卡片按钮下方) ---------- */
+/* ---------- "生成 ID"按钮(事件委托, 结果内联显示在本卡片; 批量时折叠) ---------- */
 elCardsGrid.addEventListener('click', async function (e) {
   var btn = e.target.closest('.sample-btn');
   if (!btn || btn.disabled) return;
   var card = btn.closest('.gen-card');
   var slot = card.querySelector('.sample-slot');
-  var idEl = slot.querySelector('.sample-slot-id');
+  var countInput = card.querySelector('[data-sample-count]');
+  var count = Math.max(1, Math.min(100, parseInt(countInput.value, 10) || 1));
 
   // 槽位置为加载态(虚线边框提示"生成中"), 结果回来后原地更新
   slot.hidden = false;
   slot.className = 'sample-slot loading';
-  idEl.textContent = '生成中…';
+  slot.textContent = count > 1 ? ('批量生成 ' + count + ' 个中…') : '生成中…';
 
   btn.disabled = true;
+  var t0 = performance.now();
   try {
-    var data = await apiFetch('/api/sample/' + encodeURIComponent(card.dataset.name), { method: 'POST' });
+    var data = await apiFetch('/api/sample/' + encodeURIComponent(card.dataset.name) +
+      '?count=' + count, { method: 'POST' });
+    var ms = Math.round(performance.now() - t0);
+    var ids = (data && Array.isArray(data.ids) && data.ids.length) ? data.ids : [data && data.id];
     slot.className = 'sample-slot';
-    idEl.textContent = data && data.id != null ? data.id : '(空)';
+    if (ids.length <= 1) {
+      // 单个: 直接平铺显示
+      slot.innerHTML = '<code class="sample-slot-id">' +
+        esc(ids[0] != null ? ids[0] : '(空)') + '</code>';
+    } else {
+      // 批量: 原生 <details> 折叠, 默认收起, 点击展开完整列表(可滚动)
+      var items = ids.map(function (id) { return '<li>' + esc(id) + '</li>'; }).join('');
+      slot.innerHTML =
+        '<details class="sample-batch">' +
+          '<summary>批量生成 ' + ids.length + ' 个 · 总耗时 ' + ms + 'ms(点击展开)</summary>' +
+          '<ol class="batch-list">' + items + '</ol>' +
+        '</details>';
+    }
   } catch (err) {
     slot.className = 'sample-slot err';
-    idEl.textContent = '失败: ' + err.message;
+    slot.textContent = '失败: ' + err.message;
   } finally {
     btn.disabled = false;
   }
@@ -793,9 +1033,21 @@ function applyChartDefaults() {
 function renderTable(sorted) {
   elResultTbody.innerHTML = sorted.map(function (r) {
     var samples = Array.isArray(r.samples) ? r.samples : [];
-    var first = samples.length ? samples[0] : '—';
-    // title 悬浮显示全部样例(换行分隔)
-    var titleAll = samples.length ? samples.join('\n') : '';
+    // 样例列: 首个平铺; 多个样例时折叠展开(悬浮提示保留作为无 JS 交互的兜底)
+    var sampleCell;
+    if (!samples.length) {
+      sampleCell = '<span>—</span>';
+    } else if (samples.length === 1) {
+      sampleCell = esc(samples[0]);
+    } else {
+      sampleCell =
+        '<details class="sample-batch inline-in-table">' +
+          '<summary><code>' + esc(samples[0]) + '</code> ▸ 共' + samples.length + '个</summary>' +
+          '<ol class="batch-list">' +
+            samples.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') +
+          '</ol>' +
+        '</details>';
+    }
     return '<tr>' +
       '<td>' + esc(r.display_name) + '</td>' +
       '<td class="num">' + (r.success || 0).toLocaleString('en-US') + '</td>' +
@@ -807,10 +1059,248 @@ function renderTable(sorted) {
       '<td class="num">' + fmtNum(r.p90_ms) + '</td>' +
       '<td class="num">' + fmtNum(r.p99_ms) + '</td>' +
       '<td class="num">' + fmtNum(r.max_ms) + '</td>' +
-      '<td class="cell-sample" title="' + esc(titleAll) + '">' + esc(first) + '</td>' +
+      '<td class="cell-sample">' + sampleCell + '</td>' +
       '</tr>';
   }).join('');
 }
+
+/* ============================================================
+ * 分库分表 × ID 生成 / 离线摆渡 演示区
+ * ============================================================ */
+var elOfflineSites = $('offlineSites');
+var elOfflineCentral = $('offlineCentral');
+
+/* ---------- 工具: 纯 CSS 条形图 ---------- */
+function renderBars(dist, maxVal, hotClass) {
+  var mx = maxVal || Math.max.apply(null, dist.map(function (d) { return d.rows; })) || 1;
+  return dist.map(function (d) {
+    var pct = Math.max(1.5, Math.round(d.rows / mx * 100));
+    return '<div class="bar-row">' +
+      '<span class="bar-label">' + esc(d.shard) + '</span>' +
+      '<span class="bar-track"><span class="bar-fill' + (hotClass || '') + '" style="width:' + pct + '%"></span></span>' +
+      '<span class="bar-num">' + d.rows + '</span></div>';
+  }).join('');
+}
+
+/* ---------- 分库分表四场景 ---------- */
+var SCENARIO_RENDER = {
+  independent: function (j) {
+    var rows = j.collision_samples.map(function (c) {
+      return '<tr><td class="mono">' + esc(c.label_id) + '</td><td>' +
+        c.shards.map(esc).join(' / ') + '</td></tr>';
+    }).join('');
+    return '<div class="verdict bad">' + esc(j.verdict) + '</div>' +
+      '<table><tr><th>撞号 label(前10)</th><th>同时出现在</th></tr>' + rows + '</table>';
+  },
+  step: function (j) {
+    var rows = j.shards.map(function (s) {
+      return '<tr><td>' + esc(s.shard) + '</td><td class="mono">' + s.min_seq +
+        ' … ' + s.max_seq + '</td></tr>';
+    }).join('');
+    return '<div class="verdict">' + esc(j.verdict) + '</div>' +
+      '<table><tr><th>分片</th><th>发号区间(交错不相交)</th></tr>' + rows + '</table>';
+  },
+  gene: function (j) {
+    var rows = j.route_demo.map(function (r) {
+      return '<tr><td class="mono">…' + esc(r.order_id_tail) + '</td><td>' + r.user_id +
+        '</td><td>' + r.gene + '</td><td>' + esc(r.routed_shard) + '</td><td>' +
+        esc(r.actual_shard) + '</td><td class="hit">' + (r.hit ? '✓' : '✗') + '</td></tr>';
+    }).join('');
+    return '<div class="verdict">' + esc(j.verdict) + '</div>' +
+      '<div class="bar-group-title">各分片订单数(用户基因均匀散开)</div>' +
+      renderBars(j.shards) +
+      '<table><tr><th>order_id(尾12位)</th><th>user</th><th>gene</th><th>凭ID路由</th><th>实际所在</th><th>命中</th></tr>' + rows + '</table>';
+  },
+  hotspot: function (j) {
+    return '<div class="verdict">' + esc(j.verdict) + '</div>' +
+      '<div class="bar-group-title">range 分片 + 单调 ID(橙色=热点分片, 承载 ' +
+      j.hotspot_pct + '% 写入)</div>' + renderBars(j.range_monotonic, null, ' hot') +
+      '<div class="bar-group-title">hash 分片 + 随机 ID(均匀, 但范围查询需广播)</div>' +
+      renderBars(j.hash_random);
+  },
+};
+
+// 事件委托: 分片场景按钮(自动收集卡片内的自定义参数)
+$('shardingSection').addEventListener('click', async function (e) {
+  var btn = e.target.closest('.demo-btn');
+  if (!btn || btn.disabled) return;
+  var card = btn.closest('.demo-card');
+  if (!card || !card.dataset.scenario) return;
+  var name = card.dataset.scenario;
+  var box = card.querySelector('.demo-result');
+  // 收集参数: data-param 输入 → query string(后端越界自动夹紧)
+  var qs = [];
+  card.querySelectorAll('[data-param]').forEach(function (inp) {
+    if (inp.value.trim() !== '') qs.push(inp.dataset.param + '=' + encodeURIComponent(inp.value.trim()));
+  });
+  btn.disabled = true;
+  box.hidden = false;
+  box.innerHTML = '<div class="verdict">运行中…(需 PostgreSQL)</div>';
+  try {
+    var j = await apiFetch('/api/sharding/scenario/' + encodeURIComponent(name) +
+      (qs.length ? '?' + qs.join('&') : ''), { method: 'POST' });
+    box.innerHTML = SCENARIO_RENDER[name](j);
+  } catch (err) {
+    box.innerHTML = '<div class="verdict bad">失败: ' + esc(err.message) + '</div>';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('shardResetBtn').addEventListener('click', async function () {
+  try {
+    await apiFetch('/api/sharding/reset', { method: 'POST' });
+    document.querySelectorAll('#shardingSection .demo-result').forEach(function (b) { b.hidden = true; });
+  } catch (err) { showError('重置失败: ' + err.message); }
+});
+
+/* ---------- 离线摆渡 ---------- */
+async function loadOffline() {
+  try {
+    var data = await apiFetch('/api/offline/sites');
+    renderOffline(data);
+  } catch (err) {
+    elOfflineCentral.hidden = false;
+    elOfflineCentral.innerHTML = '离线摆渡模块加载失败: <strong>' + esc(err.message) + '</strong>(需 PostgreSQL)';
+  }
+}
+
+function renderOffline(data) {
+  var c = data.central || {};
+  elOfflineCentral.hidden = false;
+  elOfflineCentral.innerHTML =
+    '<span>中心库已导入 <strong>' + (c.total_imported || 0) + '</strong> 条标签</span>' +
+    '<span>配额段数 <strong>' + (c.quota_segments || 0) + '</strong></span>' +
+    '<span>全局配额上界 <strong>' + (c.global_watermark_ceiling || 0) + '</strong></span>' +
+    (c.by_site || []).map(function (s) {
+      return '<span>' + esc(s.site_id) + ': ' + s.rows + ' 条 / ' + s.batches + ' 个摆渡批次</span>';
+    }).join('');
+
+  elOfflineSites.innerHTML = (data.sites || []).map(function (s) {
+    return '<article class="site-card" data-site="' + esc(s.site_id) + '">' +
+      '<div class="site-head"><span class="site-id">' + esc(s.site_id) + '</span>' +
+      '<span class="site-name">' + esc(s.name) + '</span></div>' +
+      '<div class="site-stats">配额区间 <strong>[' + s.quota[0] + ', ' + s.quota[1] + ']</strong>' +
+      ' · 水位 <strong>' + s.watermark + '</strong>' +
+      ' · 余量 <strong>' + s.quota_remaining + '</strong><br>' +
+      '待摆渡 <strong>' + s.ferry_pending + '</strong> 个 · 已导入批次 <strong>' + s.batch_no + '</strong>' +
+      ' · 累计发号 <strong>' + s.issued_count + '</strong></div>' +
+      '<div class="site-ops">' +
+        '<input class="mini-input" type="number" value="10" min="1" max="5000" title="发号数量">' +
+        '<input class="mini-input wide" type="text" placeholder="时钟错误日期(可选)" title="模拟终端时钟错误, 如 2020-01-01">' +
+        '<button type="button" class="demo-btn" data-op="issue">离线发号</button>' +
+        '<button type="button" class="demo-btn" data-op="import">摆渡导入</button>' +
+        '<button type="button" class="demo-btn" data-op="allocate">追加配额</button>' +
+      '</div>' +
+      '<div class="site-msg"></div>' +
+    '</article>';
+  }).join('') || '<p class="demo-intro">暂无站点, 点击下方重置按钮初始化。</p>';
+}
+
+// 事件委托: 站点卡片操作
+elOfflineSites.addEventListener('click', async function (e) {
+  var btn = e.target.closest('.demo-btn');
+  if (!btn || btn.disabled) return;
+  var card = btn.closest('.site-card');
+  if (!card) return;
+  var siteId = card.dataset.site;
+  var inputs = card.querySelectorAll('.mini-input');
+  var count = parseInt(inputs[0].value, 10) || 10;
+  var fakeDate = inputs[1].value.trim() || null;
+  var msg = card.querySelector('.site-msg');
+  btn.disabled = true;
+  msg.className = 'site-msg';
+  try {
+    var j;
+    if (btn.dataset.op === 'issue') {
+      j = await apiFetch('/api/offline/issue', {
+        method: 'POST',
+        body: { site_id: siteId, count: count, fake_date: fakeDate },
+      });
+      // 批量发号结果折叠展示(与方案卡片的批量采样一致的交互)
+      msg.className = 'site-msg';
+      var shown = j.issued || [];
+      if (shown.length > 1) {
+        msg.innerHTML =
+          '<details class="sample-batch compact">' +
+            '<summary>已发 ' + j.total + ' 个 ID' +
+              (fakeDate ? '(时钟错误演示: 日期错但序号继续涨)' : '') +
+              ' · 余量 ' + j.quota_remaining + '(点击展开)</summary>' +
+            '<ol class="batch-list">' +
+              shown.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') +
+            '</ol>' +
+          '</details>';
+      } else {
+        msg.className = 'site-msg mono';
+        msg.textContent = '已发 1 个: ' + (shown[0] || '');
+      }
+    } else if (btn.dataset.op === 'import') {
+      j = await apiFetch('/api/offline/import/' + encodeURIComponent(siteId), { method: 'POST' });
+      msg.textContent = '批次 ' + j.batch_no + ': 导入 ' + j.imported + ' 条, 冲突 ' +
+        j.conflict_count + ' 条' + (j.conflict_count ? ' → ' + j.conflicts.join(', ') : '(零冲突, 三层防线生效)');
+    } else {
+      j = await apiFetch('/api/offline/allocate', {
+        method: 'POST', body: { site_id: siteId, size: 10000 },
+      });
+      msg.textContent = '新配额已"随摆渡下发": [' + j.new_quota[0] + ', ' + j.new_quota[1] + ']';
+    }
+    await loadOffline();  // 刷新站点与中心状态
+  } catch (err) {
+    msg.className = 'site-msg err';
+    msg.textContent = err.message;
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+});
+
+// 反面教材: 裸奔终端
+$('badDemoBtn').addEventListener('click', async function () {
+  var box = $('offlineBadCard').querySelector('.demo-result');
+  var btn = this;
+  btn.disabled = true;
+  box.hidden = false;
+  box.innerHTML = '<div class="verdict">运行中…</div>';
+  try {
+    var j = await apiFetch('/api/offline/demo-collision?count=50', { method: 'POST' });
+    box.innerHTML = '<div class="verdict bad">' + esc(j.verdict) + '</div>' +
+      '<table><tr><th>被唯一索引拦下的撞号号段(前5)</th></tr>' +
+      j.conflict_samples.map(function (l) {
+        return '<tr><td class="mono">' + esc(l) + '</td></tr>';
+      }).join('') + '</table>';
+  } catch (err) {
+    box.innerHTML = '<div class="verdict bad">失败: ' + esc(err.message) + '</div>';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('offlineResetBtn').addEventListener('click', async function () {
+  try {
+    await apiFetch('/api/offline/reset', { method: 'POST' });
+    await loadOffline();
+  } catch (err) { showError('重置失败: ' + err.message); }
+});
+
+// 注册新离线站点
+$('siteRegisterBtn').addEventListener('click', async function () {
+  var id = $('newSiteId').value.trim().toUpperCase();
+  var name = $('newSiteName').value.trim();
+  var msg = $('registerMsg');
+  if (!id) { msg.className = 'site-msg err'; msg.textContent = '请输入站点号(如 S03)'; return; }
+  try {
+    var j = await apiFetch('/api/offline/register', {
+      method: 'POST', body: { site_id: id, name: name },
+    });
+    msg.className = 'site-msg';
+    msg.textContent = '站点 ' + j.site_id + ' 已注册, 首个配额区间 [' + j.quota[0] + ', ' + j.quota[1] + ']';
+    $('newSiteId').value = ''; $('newSiteName').value = '';
+    await loadOffline();
+  } catch (err) {
+    msg.className = 'site-msg err';
+    msg.textContent = err.message;
+  }
+});
 
 /* ---------- 初始化 ---------- */
 (function init() {
@@ -829,6 +1319,7 @@ function renderTable(sorted) {
 
   loadHealth();
   loadGenerators();
+  loadOffline();  // 离线摆渡演示区(惰性初始化, PG 不可用时显示提示不阻塞页面)
 })();
 </script>
 </body>

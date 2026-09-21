@@ -258,18 +258,27 @@ def list_generators() -> dict:
 # --------------------------------------------------------------------------
 
 @app.post("/api/sample/{name}")
-def sample_one(name: str) -> dict:
-    """用指定方案现场生成 1 个 ID; 未知方案 404, 依赖不可用 503。"""
+def sample_one(name: str, count: int = 1) -> dict:
+    """用指定方案现场生成 ID; 未知方案 404, 依赖不可用 503。
+
+    count 缺省 1(返回单个 id 字段); 传 count>1(夹紧到 ≤100)为批量采样,
+    返回 ids 数组 —— 教学用途: 连续生成可直观看到 INCR 连续发号 /
+    号段模式的跨段跳变 / 时间有序 ID 的前缀推进。
+    """
     gen = _find_instance(name)
     if gen is None:
         raise HTTPException(status_code=404, detail=f"unknown generator: {name}")
     if not _is_available(gen):
         raise HTTPException(status_code=503, detail="依赖服务不可用")
+    n = max(1, min(100, count))
+    ids: list[str] = []
     try:
-        generated = gen.generate()
+        for _ in range(n):
+            ids.append(gen.generate())
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"生成失败: {exc}") from exc
-    return {"name": name, "id": generated}
+    # id 字段保留(单个采样向后兼容), 批量时取第一个
+    return {"name": name, "count": n, "id": ids[0] if ids else None, "ids": ids}
 
 
 # --------------------------------------------------------------------------
@@ -347,3 +356,192 @@ def benchmark(req: BenchmarkRequest) -> dict:
         "skipped": skipped,
         "results": results,
     }
+
+
+# ==========================================================================
+# 路由组 2: 分库分表模拟(sharding)
+# ==========================================================================
+
+def _require_postgres() -> None:
+    """sharding/offline 演示强依赖 PostgreSQL, 不可用时统一 503。"""
+    if not _check_postgres():
+        raise HTTPException(status_code=503, detail="PostgreSQL 不可用, 请先启动依赖服务")
+
+
+@app.post("/api/sharding/init")
+def sharding_init() -> dict:
+    """建 4 个分片 schema 与演示表(幂等; 可重复调用)。"""
+    _require_postgres()
+    import app.sharding as sh
+
+    sh.init()
+    return {"ok": True, "shards": sh.SHARD_COUNT}
+
+
+@app.post("/api/sharding/reset")
+def sharding_reset() -> dict:
+    """清空分片演示数据并重置序列(可反复重放)。"""
+    _require_postgres()
+    import app.sharding as sh
+
+    sh.reset()
+    return {"ok": True}
+
+
+@app.get("/api/sharding/stats")
+def sharding_stats() -> dict:
+    """各场景各分片行数总览。"""
+    _require_postgres()
+    import app.sharding as sh
+
+    return {"stats": sh.stats()}
+
+
+@app.post("/api/sharding/scenario/{name}")
+def sharding_scenario(name: str, shards: int = 4, rows: int = 1000,
+                       users: int = 200, orders: int = 10,
+                       total: int = 4000, pct: int = 80) -> dict:
+    """运行一个分片演示场景(参数可自定义, 越界自动夹紧):
+
+    - independent / step: shards(分片数 1-16), rows(每分片行数 10-20000)
+    - gene:               shards, users(用户数), orders(每用户订单数)
+    - hotspot:            shards, total(总行数), pct(最新分片写入占比 50-99)
+    """
+    _require_postgres()
+    import app.sharding as sh
+
+    handlers = {
+        "independent": lambda: sh.scenario_independent(shards=shards, rows_per_shard=rows),
+        "step": lambda: sh.scenario_step(shards=shards, rows_per_shard=rows),
+        "gene": lambda: sh.scenario_gene(shards=shards, users=users, orders_per_user=orders),
+        "hotspot": lambda: sh.scenario_hotspot(shards=shards, total=total, latest_pct=pct),
+    }
+    if name not in handlers:
+        raise HTTPException(status_code=404, detail=f"unknown scenario: {name}")
+    try:
+        return handlers[name]()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # PG 建表/插入等数据库层失败统一 500(连接类错误在 _require_postgres 已挡)
+        raise HTTPException(status_code=500, detail=f"场景执行失败: {exc}") from exc
+
+
+# ==========================================================================
+# 路由组 3: 离线摆渡模拟(air-gapped / sneakernet)
+# ==========================================================================
+
+_offline_ready = False
+
+
+def _ensure_offline() -> None:
+    """首次访问时建中心表并注册演示站点(幂等)。"""
+    global _offline_ready
+    _require_postgres()
+    import app.offline as off
+
+    if not _offline_ready:
+        off.init(reset=False)
+        if not off.sites():  # 无站点文件(首次): 注册 S01/S02 演示站点
+            off.init(reset=True)
+        _offline_ready = True
+
+
+@app.get("/api/offline/sites")
+def offline_sites() -> dict:
+    """站点总览: 配额区间/水位/余量/待摆渡数。"""
+    _ensure_offline()
+    import app.offline as off
+
+    return {"sites": off.sites(), "central": off.central_stats()}
+
+
+class OfflineIssueRequest(BaseModel):
+    site_id: str
+    count: int = 10
+    fake_date: str | None = None  # 模拟终端时钟错误, 如 "2020-01-01"
+
+
+@app.post("/api/offline/issue")
+def offline_issue(req: OfflineIssueRequest) -> dict:
+    """离线发号(纯终端本地行为: 只读写本地水位文件, 不碰数据库)。"""
+    _ensure_offline()
+    import app.offline as off
+
+    try:
+        return off.issue(req.site_id, req.count, req.fake_date)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class OfflineAllocateRequest(BaseModel):
+    site_id: str
+    size: int = 10_000
+
+
+class OfflineRegisterRequest(BaseModel):
+    site_id: str   # 形如 S03(1-3 位字母数字)
+    name: str = ""
+
+
+@app.post("/api/offline/register")
+def offline_register(req: OfflineRegisterRequest) -> dict:
+    """注册新的离线站点(分配首个配额区间; 模拟装机时烧录站点号 + 下发配额)。"""
+    _ensure_offline()
+    import app.offline as off
+
+    site_id = req.site_id.strip().upper()
+    if not (1 < len(site_id) <= 4 and site_id.isalnum()):
+        raise HTTPException(status_code=400, detail="site_id 需为 2-4 位字母数字, 如 S03")
+    try:
+        site = off._register(site_id, req.name.strip() or f"{site_id} 打印站")
+        return {"site_id": site["site_id"], "quota": [site["quota_start"], site["quota_end"]]}
+    except FileExistsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/offline/allocate")
+def offline_allocate(req: OfflineAllocateRequest) -> dict:
+    """中心为站点追加新配额(模拟: 登记中心库 + 随摆渡下发到站点)。"""
+    _ensure_offline()
+    import app.offline as off
+
+    try:
+        return off.allocate(req.site_id, req.size)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/offline/import/{site_id}")
+def offline_import(site_id: str) -> dict:
+    """摆渡导入: 待摆渡队列灌入中心库, 唯一索引做冲突检测。"""
+    _ensure_offline()
+    import app.offline as off
+
+    try:
+        return off.ferry_import(site_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/offline/demo-collision")
+def offline_demo_collision(count: int = 50) -> dict:
+    """反面教材: 两个没嵌站点号的"裸奔终端"互相撞号, 被中心唯一索引拦下。"""
+    _ensure_offline()
+    import app.offline as off
+
+    return off.demo_collision(count)
+
+
+@app.post("/api/offline/reset")
+def offline_reset() -> dict:
+    """清空中心表与站点本地状态, 重建 S01/S02。"""
+    global _offline_ready
+    _require_postgres()
+    import app.offline as off
+
+    off.init(reset=True)
+    _offline_ready = True
+    return {"ok": True}

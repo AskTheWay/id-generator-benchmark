@@ -391,6 +391,61 @@ makes the whole scheme share fate with your primary database.
 
 Code: [`app/generators/db_sequence.py`](app/generators/db_sequence.py)
 
+## Sharding × ID: Where IDs Live After You Split the Database
+
+Sharding is *the* reason distributed ID generation exists: once rows are split across
+shards, `AUTO_INCREMENT` is only unique *within* one shard. The dashboard's
+**Sharding × ID** section demonstrates this live against PostgreSQL (N schemas act as
+N shards). Every scenario is self-contained (re-runnable, auto-resets) and its
+parameters are customizable — change shard count / row count / user count / hotspot
+ratio right in the card and re-run. Each scenario deliberately uses only the ID
+strategy that fits it; this is a teaching demo, not a forced tournament.
+
+| # | Scenario | What you see | Teaching point | Tunable params |
+|---|----------|--------------|----------------|----------------|
+| 1 | Independent auto-increment (anti-pattern) | The same `L00000001` exists in **every** shard — ~100% of IDs collide across shards | Why database auto-increment stops working the moment you shard; this is the origin story of distributed IDs | shards (1–16), rows per shard |
+| 2 | Step-based auto-increment | shard0 issues 1,5,9…; shard1 issues 2,6,10… — interleaved yet disjoint, globally unique with **zero coordination** | Static partitioning trades runtime coordination for planning: resharding 4→8 means migrating half the data with IDs frozen. Try running shards=4 then shards=8 and watch the ranges | shards, rows per shard |
+| 3 | Gene method (Snowflake-based) | `order_id = (snowflake << 6) \| (user_id % 64)`; extracting the low 6 bits routes you straight to the shard holding that order. Same user ⇒ same shard, 100% | IDs can *carry routing info*, eliminating broadcast queries and mapping tables. Cost: gene bits cap the shard count (divisors of 64) | shards, users, orders per user |
+| 4 | Range sharding + monotonic ID | With month-range shards the newest shard takes 80%+ of writes (hotspot bar turns amber); hash sharding is perfectly even but range queries scatter-gather | "Monotonic" flips from virtue to vice in distributed storage — exactly why TiDB added `auto_random` to shuffle auto-increment keys | shards, total rows, hotspot % |
+
+**Reading the bars**: amber = hot shard, blue = even distribution, red = collision.
+
+## Air-Gapped Sneakernet: Issuing IDs Where the Network Never Reaches
+
+Some label printers live in prisons, defense plants, or remote substations — machines
+that will *never* see your network. Data comes back on discs or USB sticks, ferried by
+a human, on a daily/weekly cadence (sneakernet / air-gapped deployment). Collision
+detection goes from milliseconds (a Redis round trip) to *weeks* (next ferry), so
+uniqueness must be guaranteed **by construction, not by detection**.
+
+The dashboard's **Offline Sneakernet** section simulates this end-to-end. Site state
+lives in local JSON files (simulating each terminal's local disk) and touches the
+database **only** when a ferry import happens — same topology as the real thing.
+
+**The three defensive layers** (each one's failure mode is covered by the next):
+
+| Layer | Prevents | How it works |
+|-------|----------|--------------|
+| 1. Site ID embedded in the ID | Cross-site collisions | Every terminal gets a globally-registered site number at install time; IDs look like `LB260922S0100000042` (prefix·date·site·seq) |
+| 2. Locally persisted watermark | Re-issuing after restart / clock chaos | The sequence number comes from a monotonic watermark on local disk that *never* moves backwards. The date field is display-only — try the "wrong clock" input (`2020-01-01`) and watch the date go wrong while IDs stay unique |
+| 3. Center-preallocated quotas | Watermark loss after reinstall | Each site draws from a quota range allocated in advance (e.g. S01: 1–10,000, S02: 10,001–20,000). When exhausted, the center appends a new range that travels back on the *next* ferry — the offline extreme of segment mode: segment size = one ferry cycle of demand |
+
+**Final backstop**: ferry imports hit a `UNIQUE` index in the central database. With
+the three layers intact it should *never* fire. The demo's anti-pattern card runs two
+"naked" terminals (no site ID, each counting from 1) — watch the unique index reject
+their collisions weeks "after the labels were printed", which is exactly why
+after-the-fact detection is too late.
+
+**Clocks in air-gapped environments**: each terminal's ID timestamp comes from *its
+own* system clock (RTC hardware → system time → timestamp), and no two machines drift
+alike. Within one site, ordering holds; across sites, never compare timestamps — use
+ferry batch numbers. Real deployments calibrate clocks opportunistically: the ferry
+media carries the authoritative time, or hardware GPS/radio clocks keep drift near
+zero without any network.
+
+Code: [`app/sharding.py`](app/sharding.py), [`app/offline.py`](app/offline.py) — demo
+data is deliberately tiny (≤ 20k rows per scenario, well under any size pressure).
+
 ## API Reference
 
 | Method | Path | Description |
@@ -400,6 +455,14 @@ Code: [`app/generators/db_sequence.py`](app/generators/db_sequence.py)
 | `GET` | `/api/generators` | All 8 strategies with metadata, live availability and a freshly generated sample |
 | `POST` | `/api/sample/{name}` | Generate one ID: `{"name": ..., "id": ...}` — `404` unknown strategy, `503` dependency unavailable |
 | `POST` | `/api/benchmark` | Run the benchmark (body below) and return per-strategy `BenchmarkResult`s |
+| `POST` | `/api/sharding/init` / `reset` | Create shard schemas / clear demo data |
+| `POST` | `/api/sharding/scenario/{independent\|step\|gene\|hotspot}` | Run a sharding scenario; query params `shards`/`rows`/`users`/`orders`/`total`/`pct` are clamped server-side |
+| `GET` | `/api/offline/sites` | Offline sites overview + central import stats |
+| `POST` | `/api/offline/issue` | Offline issuance (local watermark only; optional `fake_date` simulates a broken terminal clock) |
+| `POST` | `/api/offline/allocate` | Center appends a new quota range for a site |
+| `POST` | `/api/offline/register` | Register a new offline site |
+| `POST` | `/api/offline/import/{site_id}` | Ferry import with unique-index conflict detection |
+| `POST` | `/api/offline/demo-collision` | Anti-pattern: two site-ID-less terminals colliding |
 
 `POST /api/benchmark` request body:
 
