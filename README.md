@@ -65,8 +65,13 @@ python -m uvicorn app.main:app --reload
 #    http://localhost:8000
 ```
 
-<!-- TODO: add dashboard screenshot here (web/index.html): strategy cards with live
-     availability badges, a P50/P90/P99 latency bar chart and a QPS comparison chart -->
+### Dashboard Screenshots
+
+| Strategy cards — live availability, batch sampling (collapsible) | Benchmark results — QPS & latency quantile charts |
+|---|---|
+| ![Strategy cards with live availability badges and collapsible batch sampling](demo_imgs/Snipaste_2026-09-22_05-16-45.png) | ![Benchmark result charts: QPS comparison and P50/P90/P99 latency](demo_imgs/Snipaste_2026-09-22_05-17-07.png) |
+| Sharding × ID — collision / step / gene / hotspot scenarios | Offline sneakernet — site quotas, watermark, ferry import |
+| ![Sharding scenarios with distribution bars](demo_imgs/Snipaste_2026-09-22_05-17-36.png) | ![Offline sneakernet simulation with site cards and ferry import](demo_imgs/Snipaste_2026-09-22_05-17-46.png) |
 
 ### Configuration
 
